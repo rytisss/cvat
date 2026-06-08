@@ -85,6 +85,7 @@ const MIN_SUPPORTED_INTERACTOR_VERSION = 2;
 const core = getCore();
 const CustomPopover = withVisibilityHandling(Popover, 'tools-control');
 const startWithBoxStorageItem = 'startInteractingWithBox';
+const textPromptStorageItem = 'useLabelAsTextPrompt';
 
 function mapStateToProps(state: CombinedState): StateToProps {
     const {
@@ -159,6 +160,7 @@ interface State {
     activeTracker: MLModel | null;
     startInteractingWithBox: boolean;
     convertMasksToPolygons: boolean;
+    useLabelAsTextPrompt: boolean;
     trackedShapes: TrackedShape[];
     fetching: boolean;
     interactorResponseReceived: boolean;
@@ -244,6 +246,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                 neg_points: number[][];
                 pos_points: number[][];
                 obj_bbox: number[][];
+                text_prompts?: string[];
             };
         } | null;
         closeFetchingMessage: (() => void) | null;
@@ -258,6 +261,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         this.state = {
             convertMasksToPolygons: false,
             startInteractingWithBox: (localStorage.getItem(startWithBoxStorageItem) ?? 'true') === 'true',
+            useLabelAsTextPrompt: (localStorage.getItem(textPromptStorageItem) ?? 'false') === 'true',
             activeInteractor: props.interactors.length ? props.interactors[0] : null,
             activeTracker: supportedTrackers.length ? supportedTrackers[0] : null,
             activeLabelID: props.labels.length ? props.labels[0].id as number : null,
@@ -483,8 +487,8 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
     };
 
     private onInteraction = (e: Event): void => {
-        const { frame, isActivated } = this.props;
-        const { activeInteractor } = this.state;
+        const { frame, isActivated, labels } = this.props;
+        const { activeInteractor, activeLabelID, useLabelAsTextPrompt } = this.state;
 
         if (!isActivated) {
             return;
@@ -499,15 +503,27 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         const boxes = convertShapesForInteractor(shapes, 'rectangle', 'positive');
         const posPoints = convertShapesForInteractor(shapes, 'points', 'positive');
         const negPoints = convertShapesForInteractor(shapes, 'points', 'negative');
-        this.interaction.latestRequest = {
-            interactor,
-            data: {
-                frame,
-                obj_bbox: boxes,
-                pos_points: posPoints,
-                neg_points: negPoints,
-            },
+        const data: {
+            frame: number;
+            obj_bbox: number[][];
+            pos_points: number[][];
+            neg_points: number[][];
+            text_prompts?: string[];
+        } = {
+            frame,
+            obj_bbox: boxes,
+            pos_points: posPoints,
+            neg_points: negPoints,
         };
+
+        if (useLabelAsTextPrompt && activeLabelID !== null) {
+            const activeLabel = labels.find((label) => label.id === activeLabelID);
+            if (activeLabel?.name) {
+                data.text_prompts = [activeLabel.name];
+            }
+        }
+
+        this.interaction.latestRequest = { interactor, data };
 
         this.runInteractionRequest(this.interaction.id);
     };
@@ -1156,6 +1172,7 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
         } = this.props;
         const {
             activeInteractor, activeLabelID, fetching, startInteractingWithBox, convertMasksToPolygons,
+            useLabelAsTextPrompt,
         } = this.state;
 
         if (!interactors.length) {
@@ -1245,6 +1262,17 @@ export class ToolsControlComponent extends React.PureComponent<Props, State> {
                             <Text>Start with a bounding box</Text>
                         </div>
                     )}
+
+                    <div>
+                        <Switch
+                            checked={useLabelAsTextPrompt}
+                            onChange={(value: boolean) => {
+                                localStorage.setItem(textPromptStorageItem, value.toString());
+                                this.setState({ useLabelAsTextPrompt: value });
+                            }}
+                        />
+                        <Text>Use label name as text prompt</Text>
+                    </div>
                 </div>
                 <div className='cvat-tools-interactor-extras'>
                     {renderedInteractorExtras}
