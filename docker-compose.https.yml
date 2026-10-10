@@ -7,6 +7,8 @@ services:
     labels:
       traefik.http.routers.cvat.entrypoints: websecure
       traefik.http.routers.cvat.tls.certresolver: lets-encrypt
+      # Traefik terminates TLS itself here, so the public scheme is always https.
+      traefik.http.middlewares.cvat-xfp.headers.customrequestheaders.X-Forwarded-Proto: https
 
   cvat_ui:
     labels:
