@@ -30,6 +30,30 @@ Upstream CVAT does not natively ingest DICOM files. This fork adds:
   `create-task-content.tsx`).
 - `pydicom` added to `cvat/requirements/base.in` / `base.txt`.
 
+### Angiography runs (CVD-LINK sites)
+
+A task holds **one angiography run**. The partner exports store runs in three ways, and all
+three upload from **My computer** on the task creation page:
+
+| Site | What a run is on disk | What to upload |
+| --- | --- | --- |
+| IMSP | one multi-frame `File*.dcm` (JPEG Lossless) | that one file |
+| TAUH | one extensionless multi-frame file in `XA_*/` or `IVUS_*/` (12-bit) | that one file |
+| UMFCD | a `<study>/<series>/` folder of single-frame files `I*` | every file in the folder (open it in the file picker, press Ctrl/Cmd+A) |
+
+How the server handles it:
+
+- Files without an extension are recognised as DICOM by the `DICM` marker at byte 128.
+- The files of one task must form one run: a single file, or single-frame files that share one
+  `SeriesInstanceUID`. Files from two series, more than one multi-frame file, or DICOM mixed
+  with other media are rejected with an error saying which.
+- Frames are ordered by `InstanceNumber`, then by file name. UMFCD stores the *run* number in
+  `InstanceNumber`, so there the file name counter (`I2000009` < `I200000A`) gives the order.
+- 8-bit runs (IMSP, UMFCD) keep their stored pixel values. Deeper runs (TAUH, 12-bit) are mapped
+  to 8-bit with one 0.5–99.5 percentile window for the whole run, so brightness doesn't change
+  between frames. `MONOCHROME1` is inverted.
+- JPEG Lossless decoding comes from `python-gdcm` (BSD licence), added to the server requirements.
+
 ## CVDLINK branding
 
 The CVAT logos and favicons are replaced with CVDLINK assets in:
