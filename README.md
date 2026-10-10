@@ -140,7 +140,7 @@ curl -s -X POST "$CVAT_URL/api/auth/login" -H 'Content-Type: application/json' \
 ```
 
 In the browser, the login page should have no "Create an account" link, and
-opening `/auth/register` directly should not show a sign-up form. The unit
+opening `/auth/register` directly redirects back to the login page. The unit
 tests for this live in `cvat/apps/iam/tests/test_rest_api.py`
 (`UserRegisterDisabledAPITestCase`, `PasswordManagementAPITestCase`).
 
