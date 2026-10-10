@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 import base64
+import unittest
 
 from allauth.account.forms import default_token_generator
 from allauth.account.models import EmailAddress
@@ -33,6 +34,23 @@ urlpatterns = original_urlpatterns + [
 ]
 
 
+class UserRegisterDisabledAPITestCase(ApiTestBase):
+    def test_api_v2_user_register_is_disabled(self):
+        response = self.client.post(
+            "/api/auth/register",
+            {
+                "username": "test_username",
+                "email": "test_email@test.com",
+                "password1": "$Test357Test%",
+                "password2": "$Test357Test%",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(User.objects.filter(username="test_username").exists())
+
+
+@unittest.skip("Self-registration is disabled in this fork")
 class UserRegisterAPITestCase(ApiTestBase):
     user_data = {
         "first_name": "test_first",
@@ -238,6 +256,13 @@ class UserRegisterAPITestCase(ApiTestBase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["password1"][0].code, "min_length")
         self.assertFalse(User.objects.filter(username=self.user_data["username"]).exists())
+
+
+class PasswordManagementAPITestCase(ApiTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        # create only admin account
+        create_db_users(cls, primary=False, extra=False)
 
     def test_password_change_rejects_oversized_new_passwords(self):
         oversized_password = "Aa1" + ("x" * 254)

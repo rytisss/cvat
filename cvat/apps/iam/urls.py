@@ -15,10 +15,9 @@ from django.urls import path, re_path
 from django.urls.conf import include
 from django.utils.module_loading import import_string
 
-from cvat.apps.iam.views import ConfirmEmailViewEx, LoginViewEx, RegisterViewEx, RulesView
+from cvat.apps.iam.views import ConfirmEmailViewEx, LoginViewEx, RulesView
 
 BASIC_LOGIN_PATH_NAME = "rest_login"
-BASIC_REGISTER_PATH_NAME = "rest_register"
 
 urlpatterns = [
     path("login", LoginViewEx.as_view(), name=BASIC_LOGIN_PATH_NAME),
@@ -27,9 +26,10 @@ urlpatterns = [
 ]
 
 if settings.IAM_TYPE == "BASIC":
-    urlpatterns += [
-        path("register", RegisterViewEx.as_view(), name=BASIC_REGISTER_PATH_NAME),
-    ]
+    # Self-registration is intentionally disabled in this fork: the register endpoint
+    # is not mounted, which also makes the UI hide the "Create an account" page
+    # (it checks for /api/auth/register in the server schema). Accounts are created
+    # by administrators via the Django admin panel.
 
     password_change_view_kwargs = {}
 
