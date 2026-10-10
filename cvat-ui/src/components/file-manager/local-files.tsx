@@ -18,7 +18,8 @@ interface Props {
 export default function LocalFiles(props: Props): JSX.Element {
     const { files, onUpload, many } = props;
     const hintText = many ? 'You can upload one or more videos' :
-        'You can upload an archive with images, a video, or multiple images';
+        'You can upload an archive with images, a video, multiple images, ' +
+        'or one DICOM run (a file, or all files of a single-frame series)';
 
     return (
         <>

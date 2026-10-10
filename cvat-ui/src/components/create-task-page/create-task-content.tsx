@@ -18,7 +18,9 @@ import { getCore, Storage, StorageLocation } from 'cvat-core-wrapper';
 import LabelsEditor from 'components/labels-editor/labels-editor';
 import FileManagerComponent, { Files } from 'components/file-manager/file-manager';
 import { RemoteFile } from 'components/file-manager/remote-browser';
-import { getFileContentType, getContentTypeRemoteFile, getFileNameFromPath } from 'utils/files';
+import {
+    getFileContentType, getContentTypeRemoteFile, getFileNameFromPath, isDicomCandidate,
+} from 'utils/files';
 
 import { FrameSelectionMethod } from 'components/create-job-page/job-form';
 import { formFieldsError } from 'utils/validation';
@@ -109,7 +111,8 @@ const defaultState: State = {
 };
 
 const UploadFileErrorMessages = {
-    one: 'Wrong list of files. You can upload an archive with images, a video, a pdf file, a single DICOM file, or multiple images. ',
+    one: 'Wrong list of files. You can upload an archive with images, a video, a pdf file, ' +
+        'one DICOM run (a single file, or all single-frame files of one series), or multiple images. ',
     multi: 'Wrong list of files. You can upload one or more videos. ',
 };
 
@@ -330,9 +333,11 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
 
         const excludedManifests = uploadedFiles.filter((x: File) => !x.name.endsWith('.jsonl'));
         if (!many && excludedManifests.length > 1) {
-            uploadFileErrorMessage = excludedManifests.every((it) => (
+            const allImages = excludedManifests.every((it) => (
                 getFileContentType(it) === SupportedShareTypes.IMAGE
-            )) ? '' : UploadFileErrorMessages.one;
+            ));
+            uploadFileErrorMessage = allImages || excludedManifests.every(isDicomCandidate) ?
+                '' : UploadFileErrorMessages.one;
         } else if (many) {
             uploadFileErrorMessage = excludedManifests.every(
                 (it) => getFileContentType(it) === SupportedShareTypes.VIDEO,
