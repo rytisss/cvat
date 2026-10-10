@@ -9,6 +9,8 @@ identical to upstream and tracks the `develop` branch.
 | [DICOM support](#dicom-dcm-support) | Native ingestion of `.dcm` files, JPEG transfer syntax decoding, and YBR → RGB color correction. |
 | [CVDLINK branding](#cvdlink-branding) | Logo, favicon, and product-name swaps; original CVAT assets kept alongside. |
 | [Local HTTPS](#local-https-for-self-hosted-deployment) | Self-hosted TLS using locally-issued certs from `certs/` instead of Let's Encrypt. |
+| [Running on an external URL](#running-on-an-external-url) | Serve CVAT on a public hostname behind a TLS-terminating proxy or Cloudflare Tunnel, with working annotation uploads. |
+| [User accounts](#user-accounts) | Public self-registration is disabled; accounts are created by administrators. |
 | [Keycloak SSO](#keycloak-sso-via-oauth2-proxy) | OpenID Connect single sign-on for the open-source build, layered in via oauth2-proxy + Traefik forwardAuth. |
 
 ## DICOM (`.dcm`) support
@@ -46,6 +48,101 @@ artwork can still be referenced if needed.
 behind a locally-issued TLS certificate instead of Let's Encrypt. The
 `certs/` directory is the expected mount point for `cert.pem` / `key.pem`
 and is gitignored — certificates are never committed to the repository.
+
+## Running on an external URL
+
+To serve CVAT on a public hostname with TLS terminated **outside** the stack
+(your own reverse proxy, a load balancer, or a Cloudflare Tunnel) and Traefik
+on plain HTTP behind it, set two variables:
+
+```bash
+CVAT_HOST=cvat.example.com     # Traefik routes by hostname
+CVAT_PUBLIC_SCHEME=https       # the scheme users actually see
+```
+
+Without `CVAT_PUBLIC_SCHEME=https`, Django sees `http` and builds `http://`
+upload (TUS) URLs that browsers block as mixed content, so annotation and
+data uploads fail
+([cvat-ai/cvat#4843](https://github.com/cvat-ai/cvat/issues/4843)). A Traefik
+middleware (`cvat-xfp` in `docker-compose.yml`) forces `X-Forwarded-Proto` to
+this value on every request. It forces the header rather than trusting the
+proxy's IP (`forwardedHeaders.trustedIPs`) because Docker Desktop rewrites the
+source address of proxied connections, so trust lists silently fail to match.
+Leave the variable unset for plain-HTTP localhost use. When Traefik terminates
+TLS itself (`docker-compose.https.yml`, including the SSO setup), the overlay
+pins the header to `https` and the variable is not needed.
+
+### Example: Cloudflare Tunnel
+
+No inbound ports or certificates needed — run
+[`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+on the host:
+
+1. In the Cloudflare Zero Trust dashboard, add a public hostname for the
+   tunnel (e.g. `cvat.example.com`) pointing at **`http://localhost:8080`**.
+2. Put the two variables above in a `.env` file next to `docker-compose.yml`
+   (gitignored, read by `docker compose` automatically).
+3. Apply: `docker compose -f docker-compose.yml up -d` (add the overlays you
+   normally use; only the affected containers are recreated).
+
+CVAT is then live at `https://cvat.example.com`. Because Traefik routes by
+hostname, `http://localhost:8080` returns **404** once `CVAT_HOST` is set —
+use the public URL.
+
+### Check the scheme reaches Django
+
+Absolute URLs that Django builds (pagination links, upload locations) must use
+the public scheme. With at least two projects, list one per page and look at
+the `next` link:
+
+```bash
+CVAT_URL=https://cvat.example.com
+curl -s -u admin:<password> "$CVAT_URL/api/projects?page_size=1" | grep -o '"next":"[^"]*"'
+# expected: "next":"https://cvat.example.com/api/projects?page=2&page_size=1"
+```
+
+An `http://` link means `CVAT_PUBLIC_SCHEME` is not set (or the containers were
+not recreated after setting it), and uploads will fail in the browser. Finally,
+create a task and upload an image from the UI at the public URL — it should
+complete without mixed-content errors in the browser console.
+
+## User accounts
+
+Public self-registration is **disabled**: the `/api/auth/register` endpoint is
+not mounted (`cvat/apps/iam/urls.py`), and the UI hides the "Create an account"
+page automatically because it checks the server schema for that endpoint.
+Administrators create accounts with
+`docker exec -it cvat_server bash -ic 'python3 ~/manage.py createsuperuser'`
+or in the Django admin panel at `<your CVAT URL>/admin` (Authentication and
+Authorization → Users → Add user). Password change and reset for existing
+accounts work as in stock CVAT. With Keycloak SSO enabled, users are still
+auto-provisioned on first SSO login.
+
+Upstream unit tests for registration are skipped; upstream REST/e2e suites
+that self-register test users will fail.
+
+### Check registration is disabled
+
+```bash
+CVAT_URL=https://cvat.example.com   # or http://localhost:8080 without CVAT_HOST
+
+# 1. The endpoint is gone (expect 404)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$CVAT_URL/api/auth/register" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"intruder","email":"intruder@example.com","password1":"Xy7!longpass","password2":"Xy7!longpass"}'
+
+# 2. The schema no longer advertises it (expect 0)
+curl -s "$CVAT_URL/api/schema/" | grep -c '/api/auth/register'
+
+# 3. Login still works (expect a JSON body with "key")
+curl -s -X POST "$CVAT_URL/api/auth/login" -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<password>"}'
+```
+
+In the browser, the login page should have no "Create an account" link, and
+opening `/auth/register` directly should not show a sign-up form. The unit
+tests for this live in `cvat/apps/iam/tests/test_rest_api.py`
+(`UserRegisterDisabledAPITestCase`, `PasswordManagementAPITestCase`).
 
 ## Keycloak SSO via oauth2-proxy
 
