@@ -430,32 +430,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/RestAuthDetail'
           description: ''
-  /api/auth/register:
-    post:
-      operationId: auth_create_register
-      tags:
-      - auth
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterSerializerExRequest'
-        required: true
-      security:
-      - tokenAuth: []
-      - accessTokenAuth: []
-      - sessionAuth: []
-        csrfAuth: []
-        csrfHeaderAuth: []
-      - basicAuth: []
-      - {}
-      responses:
-        '201':
-          content:
-            application/vnd.cvat+json:
-              schema:
-                $ref: '#/components/schemas/RegisterSerializerEx'
-          description: ''
   /api/auth/rules:
     get:
       operationId: auth_retrieve_rules
@@ -10584,66 +10558,6 @@ components:
         * `accuracy` - ACCURACY
         * `precision` - PRECISION
         * `recall` - RECALL
-    RegisterSerializerEx:
-      type: object
-      properties:
-        username:
-          type: string
-          maxLength: 150
-          minLength: 5
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        email_verification_required:
-          type: boolean
-          readOnly: true
-        key:
-          type: string
-          nullable: true
-          readOnly: true
-      required:
-      - username
-    RegisterSerializerExRequest:
-      type: object
-      properties:
-        username:
-          type: string
-          minLength: 5
-          maxLength: 150
-        email:
-          type: string
-          format: email
-          minLength: 1
-          maxLength: 254
-        password1:
-          type: string
-          writeOnly: true
-          minLength: 8
-          maxLength: 256
-        password2:
-          type: string
-          writeOnly: true
-          minLength: 8
-          maxLength: 256
-        first_name:
-          type: string
-          minLength: 1
-          maxLength: 150
-        last_name:
-          type: string
-          minLength: 1
-          maxLength: 150
-      required:
-      - password1
-      - password2
-      - username
     Request:
       type: object
       properties:

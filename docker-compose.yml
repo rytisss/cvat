@@ -108,6 +108,14 @@ services:
         (PathPrefix(`/api/`) || PathPrefix(`/static/`) || PathPrefix(`/admin`)
           || PathPrefix(`/django-rq`))
       traefik.http.routers.cvat.entrypoints: web
+      # Force the scheme Django sees. Set CVAT_PUBLIC_SCHEME=https when a
+      # TLS-terminating proxy or tunnel fronts CVAT; otherwise Django builds
+      # http:// upload (TUS) URLs that browsers block as mixed content
+      # (cvat-ai/cvat#4843). Peer-IP trust (forwardedHeaders.trustedIPs) is not
+      # reliable here: Docker Desktop rewrites the source address of proxied
+      # connections, so the middleware sets the header unconditionally instead.
+      traefik.http.middlewares.cvat-xfp.headers.customrequestheaders.X-Forwarded-Proto: ${CVAT_PUBLIC_SCHEME:-http}
+      traefik.http.routers.cvat.middlewares: cvat-xfp@docker
     volumes:
       - cvat_data:/home/django/data
       - cvat_keys:/home/django/keys
@@ -257,6 +265,7 @@ services:
       traefik.http.services.cvat-ui.loadbalancer.server.port: "8000"
       traefik.http.routers.cvat-ui.rule: Host(`${CVAT_HOST:-localhost}`)
       traefik.http.routers.cvat-ui.entrypoints: web
+      traefik.http.routers.cvat-ui.middlewares: cvat-xfp@docker
     networks:
       - cvat
 
