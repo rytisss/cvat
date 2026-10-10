@@ -481,6 +481,12 @@ class PdfReader(ImageListReader):
 
 
 class DicomReader(ImageListReader):
+    """Converts one DICOM run into a sequence of 8-bit PNG frames.
+
+    A run is either a single (possibly multi-frame) file, or a series of single-frame files
+    sharing one SeriesInstanceUID, as some vendors export cine runs one frame per file.
+    """
+
     def __init__(
         self,
         source_paths: list[Path],
@@ -491,67 +497,62 @@ class DicomReader(ImageListReader):
         sorting_method=SortingMethod.LEXICOGRAPHICAL,
         extract_dir=None,
     ):
-        (self._dicom_source,) = source_paths
-
         import pydicom
 
-        _basename = os.path.splitext(os.path.basename(self._dicom_source))[0]
-        self._tmp_dir = extract_dir if extract_dir else os.path.dirname(self._dicom_source)
-        os.makedirs(self._tmp_dir, exist_ok=True)
+        sources = [Path(p) for p in source_paths]
+        headers = {p: pydicom.dcmread(p, stop_before_pixels=True) for p in sources}
 
-        ds = pydicom.dcmread(self._dicom_source)
-        pixel_array = ds.pixel_array
+        series = {str(h.get("SeriesInstanceUID", "")) for h in headers.values()}
+        if len(series) > 1:
+            raise ValueError(
+                "All DICOM files of a task must belong to one run, "
+                f"but files from {len(series)} different series were found"
+            )
+        if len(sources) > 1 and any(
+            int(h.get("NumberOfFrames") or 1) > 1 for h in headers.values()
+        ):
+            raise ValueError(
+                "Only one multi-frame DICOM file can be used per task: it already holds a whole run"
+            )
 
-        samples = getattr(ds, "SamplesPerPixel", 1)
-        photometric = getattr(ds, "PhotometricInterpretation", "")
-        is_color = samples > 1
+        # InstanceNumber orders the frames of a standard series. Some vendors store the run number
+        # there instead, so ties fall back to the file name: comparing length first keeps
+        # "img2" before "img10" and base-36 counters ("I2000009" < "I200000A") in order.
+        sources.sort(
+            key=lambda p: (int(headers[p].get("InstanceNumber") or 0), len(p.name), p.name)
+        )
 
-        # Convert YBR color space on raw data before any normalization.
-        # Skip for JPEG-compressed transfer syntaxes — the JPEG decoder
-        # already converts YBR to RGB during decompression.
-        if is_color and "YBR" in photometric:
-            ts_uid = str(getattr(ds.file_meta, "TransferSyntaxUID", ""))
-            is_jpeg = ts_uid.startswith("1.2.840.10008.1.2.4.")
-            if not is_jpeg:
-                from pydicom.pixel_data_handlers.util import convert_color_space
+        frames = []
+        for path in sources:
+            frames.extend(self._read_frames(pydicom.dcmread(path)))
+        photometric = str(headers[sources[0]].get("PhotometricInterpretation", ""))
 
-                pixel_array = convert_color_space(pixel_array, photometric, "RGB")
+        # 8-bit data is shown as stored. Deeper data gets one window for the whole run, so the
+        # brightness doesn't jump between frames of a cine.
+        window = None
+        if any(frame.dtype != np.uint8 for frame in frames):
+            window = np.percentile(np.stack(frames), [0.5, 99.5])
 
-        pixel_array = pixel_array.astype(np.float64)
+        tmp_dir = extract_dir if extract_dir else os.path.dirname(sources[0])
+        os.makedirs(tmp_dir, exist_ok=True)
+        basename = os.path.splitext(sources[0].name)[0]
+        num_digits = len(str(len(frames)))
 
-        # Apply rescale slope/intercept only for grayscale (CT/MRI Hounsfield units etc.)
-        if not is_color:
-            slope = float(getattr(ds, "RescaleSlope", 1))
-            intercept = float(getattr(ds, "RescaleIntercept", 0))
-            pixel_array = pixel_array * slope + intercept
-
-        # Extract all slices/frames
-        expected_ndim = 2 if not is_color else 3
-
-        if pixel_array.ndim == expected_ndim:
-            slices = [pixel_array]
-        elif pixel_array.ndim > expected_ndim:
-            flat = pixel_array.reshape(-1, *pixel_array.shape[-(expected_ndim):])
-            slices = [flat[i] for i in range(flat.shape[0])]
-        else:
-            slices = [pixel_array]
-
-        num_digits = len(str(len(slices)))
         output_paths = []
+        for idx, frame in enumerate(frames):
+            if window is not None:
+                frame = self._apply_window(frame, *window)
+            if photometric == "MONOCHROME1":
+                frame = 255 - frame
 
-        for idx, sl in enumerate(slices):
-            vmin, vmax = sl.min(), sl.max()
-            if vmax > vmin:
-                sl = (sl - vmin) / (vmax - vmin) * 255
-            sl = sl.astype(np.uint8)
-
-            suffix = f"_{str(idx).zfill(num_digits)}" if len(slices) > 1 else ""
-            output_path = os.path.join(self._tmp_dir, f"{_basename}{suffix}.png")
-            Image.fromarray(sl).save(output_path)
-            output_paths.append(Path(output_path))
+            suffix = f"_{str(idx).zfill(num_digits)}" if len(frames) > 1 else ""
+            output_path = Path(tmp_dir) / f"{basename}{suffix}.png"
+            Image.fromarray(frame).save(output_path)
+            output_paths.append(output_path)
 
         if not extract_dir:
-            os.remove(self._dicom_source)
+            for path in sources:
+                os.remove(path)
 
         super().__init__(
             source_paths=output_paths,
@@ -561,6 +562,32 @@ class DicomReader(ImageListReader):
             dimension=dimension,
             sorting_method=sorting_method,
         )
+
+    @staticmethod
+    def _read_frames(ds) -> list[np.ndarray]:
+        pixel_array = ds.pixel_array
+        is_color = getattr(ds, "SamplesPerPixel", 1) > 1
+        photometric = getattr(ds, "PhotometricInterpretation", "")
+
+        # Convert YBR color space on raw data. Skip for JPEG-compressed transfer syntaxes:
+        # the JPEG decoder already converts YBR to RGB during decompression.
+        if is_color and "YBR" in photometric:
+            ts_uid = str(getattr(ds.file_meta, "TransferSyntaxUID", ""))
+            if not ts_uid.startswith("1.2.840.10008.1.2.4."):
+                from pydicom.pixels import convert_color_space
+
+                pixel_array = convert_color_space(pixel_array, photometric, "RGB")
+
+        frame_ndim = 3 if is_color else 2
+        if pixel_array.ndim == frame_ndim:
+            return [pixel_array]
+        return list(pixel_array.reshape(-1, *pixel_array.shape[-frame_ndim:]))
+
+    @staticmethod
+    def _apply_window(frame: np.ndarray, low: float, high: float) -> np.ndarray:
+        scaled = (frame.astype(np.float32) - low) * (255 / max(high - low, 1))
+        return np.clip(np.rint(scaled), 0, 255).astype(np.uint8)
+
 
 class ZipReader(ImageListReader):
     def __init__(
@@ -1245,7 +1272,19 @@ def _is_zip(path):
 
 def _is_dicom(path):
     mime = mimetypes.guess_type(path)
-    return mime[0] == "application/dicom"
+    if mime[0] == "application/dicom":
+        return True
+    if mime[0] is not None or not os.path.isfile(path):
+        return False
+
+    # Vendors often export DICOM files without an extension (I1000000) or named by UID
+    # (1.2.840...), so unknown names are recognised by the "DICM" marker after the preamble.
+    try:
+        with open(path, "rb") as f:
+            f.seek(128)
+            return f.read(4) == b"DICM"
+    except OSError:
+        return False
 
 
 # 'has_mime_type': function receives 1 argument - path to file.
@@ -1297,7 +1336,8 @@ MEDIA_TYPES = {
         "has_mime_type": _is_dicom,
         "extractor": DicomReader,
         "mode": "annotation",
-        "unique": True,
+        # One run per task, but a run may span many single-frame files; DicomReader validates it.
+        "unique": False,
     },
 }
 
