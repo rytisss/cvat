@@ -2,34 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-export function getFileContentTypeByMimeType(mimeType: string): string {
-    return mimeType.split('/')[0];
-}
-
-export function getFileContentType(file: File): string {
-    // Check extension first for medical formats the browser doesn't recognize as image/video
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (MEDICAL_EXTENSIONS.includes(ext)) return 'dicom';
-
-    const mimeType = getFileContentTypeByMimeType(file.type);
-    if (mimeType) return mimeType;
-
-    // Fallback to extension for files with no MIME type
-    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
-    if (VIDEO_EXTENSIONS.includes(ext)) return 'video';
-    return '';
-}
-
-export function checkFileTypesEqual(files: File[]): boolean {
-    if (!files.length) return true;
-    const typeFirstFile: string = getFileContentType(files[0]);
-    return files.every((file) => getFileContentType(file) === typeFirstFile);
-}
-
-function getUrlExtension(url: string): string {
-    return (url.split(/[#?]/)[0].split('.').pop()?.trim() || '').toLowerCase();
-}
-
 // Medical image formats treated as images
 const MEDICAL_EXTENSIONS = ['dcm'];
 
@@ -51,6 +23,40 @@ const VIDEO_EXTENSIONS = ['3g2', '3ga', '3gp', '3gp2', '3gpp', '3gpp2', 'amv', '
     'mp2', 'mp4', 'mpe', 'mpeg', 'mpg', 'mpl', 'mpls', 'mpv', 'mts', 'mxf', 'mxu', 'nsv', 'ogg', 'ogm', 'ogv',
     'qt', 'qtvr', 'rm', 'rmvb', 'roq', 'rv', 'rvx', 'svi', 'ts', 'vdr', 'viv', 'vivo', 'vob', 'webm', 'wmp', 'wmv', 'yuv',
 ];
+
+export function getFileContentTypeByMimeType(mimeType: string): string {
+    return mimeType.split('/')[0];
+}
+
+export function getFileContentType(file: File): string {
+    // Check extension first for medical formats the browser doesn't recognize as image/video
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (MEDICAL_EXTENSIONS.includes(ext)) return 'dicom';
+
+    const mimeType = getFileContentTypeByMimeType(file.type);
+    if (mimeType) return mimeType;
+
+    // Fallback to extension for files with no MIME type
+    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
+    if (VIDEO_EXTENSIONS.includes(ext)) return 'video';
+    return '';
+}
+
+// A DICOM run can be one file or many single-frame files, often exported without an extension
+// (e.g. I1000000). The server recognises such files by content, so let them through here.
+export function isDicomCandidate(file: File): boolean {
+    return !file.name.includes('.') || getFileContentType(file) === 'dicom';
+}
+
+export function checkFileTypesEqual(files: File[]): boolean {
+    if (!files.length) return true;
+    const typeFirstFile: string = getFileContentType(files[0]);
+    return files.every((file) => getFileContentType(file) === typeFirstFile);
+}
+
+function getUrlExtension(url: string): string {
+    return (url.split(/[#?]/)[0].split('.').pop()?.trim() || '').toLowerCase();
+}
 
 export function getContentTypeRemoteFile(url: string): 'image' | 'video' | 'unknown' {
     const extension = getUrlExtension(url);

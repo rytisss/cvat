@@ -227,7 +227,7 @@ def _create_segments_and_jobs(
     db_task.save()
 
 
-def _count_files(data):
+def _count_files(data, upload_dir: Path):
     share_root = settings.SHARE_ROOT
     server_files = []
 
@@ -269,8 +269,12 @@ def _count_files(data):
 
     counter = {media_type: [] for media_type in MEDIA_TYPES.keys()}
 
+    # Uploaded and downloaded files are already in upload_dir; pass their real paths so files
+    # without a telling extension (e.g. DICOM) can be recognised by their content.
     count_files(
-        file_mapping={f: f for f in data["remote_files"] or data["client_files"]},
+        file_mapping={
+            f: os.path.join(upload_dir, f) for f in data["remote_files"] or data["client_files"]
+        },
         counter=counter,
     )
 
@@ -318,6 +322,14 @@ def _validate_data(counter, manifest_files=None):
 
     if unique_entries == 0 and multiple_entries == 0:
         raise ValueError("No media data found")
+
+    if counter["dicom"] and multiple_entries > len(counter["dicom"]):
+        count = ", ".join(["{} {}(s)".format(len(v), k) for k, v in counter.items() if v])
+        raise ValueError(
+            "DICOM files can't be combined with other media in one task, but {} found.".format(
+                count
+            )
+        )
 
     task_modes = [
         MEDIA_TYPES[media_type]["mode"]
@@ -1211,7 +1223,7 @@ def create_thread(
         )
 
     # count and validate uploaded files
-    media = _count_files(data)
+    media = _count_files(data, upload_dir=upload_dir)
     media, task_mode = _validate_data(media, manifest_files)
     is_media_sorted = False
 
@@ -1340,8 +1352,11 @@ def create_thread(
             "start": db_data.start_frame,
             "stop": data["stop_frame"],
         }
-        if media_type in {'archive', 'zip', 'pdf', 'dicom'} and db_data.storage == models.StorageChoice.SHARE:
-            details['extract_dir'] = db_data.get_upload_dirname()
+        if (
+            media_type in {"archive", "zip", "pdf", "dicom"}
+            and db_data.storage == models.StorageChoice.SHARE
+        ):
+            details["extract_dir"] = db_data.get_upload_dirname()
             upload_dir = db_data.get_upload_dirname()
             db_data.storage = models.StorageChoice.LOCAL
         if media_type != "video":
