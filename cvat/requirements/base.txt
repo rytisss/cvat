@@ -240,12 +240,16 @@ pycocotools==2.0.10
     # via datumaro
 pydicom>=3.0
     # via -r cvat/requirements/base.in
-python-gdcm==3.0.26
-    # via -r cvat/requirements/base.in
 pycparser==2.22
     # via cffi
 pyjwt[crypto]==2.12.1
     # via django-allauth
+pylibjpeg==2.0.1
+    # via -r cvat/requirements/base.in
+pylibjpeg-libjpeg==2.2.0
+    # via -r cvat/requirements/base.in
+pylibjpeg-openjpeg==2.3.0
+    # via -r cvat/requirements/base.in
 pylogbeat==2.0.1
     # via python-logstash-async
 pyparsing==3.2.3
