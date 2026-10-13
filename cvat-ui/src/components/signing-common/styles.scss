@@ -4,12 +4,16 @@
 
 @import '../../styles';
 
+// CVDLINK brand greens, taken from the CVDLINK logo (cvat/apps/engine/static/logo.svg)
+$cvdlink-green: #536e5f;
+$cvdlink-green-dark: #3f5548;
+
 $heading-font: 'Sora', sans-serif;
 $signing-font: 'Roboto Flex', sans-serif;
-$heading-color: white;
+$heading-color: $cvdlink-green;
 $error-color: #ff4d4f;
-$action-button-color-1: black;
-$action-button-color-2: gray;
+$action-button-color-1: $cvdlink-green;
+$action-button-color-2: white;
 $action-button-color-3: #d4d4d4;
 $placeholder-color: #c5bfbf;
 $base-transition: all 0.8s ease;
@@ -43,10 +47,6 @@ $social-google-background: #4286f5;
     position: fixed;
     padding: $grid-unit-size * 2 0 0 0;
     width: 100%;
-
-    .cvat-logo-icon {
-        filter: brightness(0) invert(1);
-    }
 }
 
 .cvat-signing-background {
@@ -58,13 +58,13 @@ $social-google-background: #4286f5;
 
 .cvat-credentials-link {
     a {
-        color: black;
+        color: $cvdlink-green;
         text-decoration: underline;
         text-decoration-thickness: 2px;
     }
 
     a:hover {
-        color: black;
+        color: $cvdlink-green-dark;
         text-decoration: underline;
         text-decoration-thickness: 2px;
     }
@@ -107,11 +107,11 @@ $social-google-background: #4286f5;
     .ant-input-affix-wrapper-focused {
         @extend .cvat-input-floating-label-above;
 
-        box-shadow: 0 2px 0 0 black;
+        box-shadow: 0 2px 0 0 $cvdlink-green;
     }
 
     .ant-input-affix-wrapper-focused:hover {
-        box-shadow: 0 2px 0 0 black;
+        box-shadow: 0 2px 0 0 $cvdlink-green;
     }
 
     .ant-input {
@@ -166,7 +166,7 @@ $social-google-background: #4286f5;
     transition: $base-transition;
 
     &:hover {
-        background-color: $action-button-color-1 !important;
+        background-color: $cvdlink-green-dark !important;
         color: $action-button-color-2 !important;
     }
 }
@@ -174,8 +174,13 @@ $social-google-background: #4286f5;
 .cvat-login-form-wrapper {
     border-radius: $border-radius-base;
     background: $background-color-1;
+    box-shadow: 0 2px 16px rgba(83, 110, 95, 15%);
     padding: $grid-unit-size * 6;
     height: $grid-unit-size * 87;
+
+    h2.ant-typography {
+        color: $cvdlink-green;
+    }
 
     .cvat-credentials-form-item {
         height: $grid-unit-size * 9.5;
