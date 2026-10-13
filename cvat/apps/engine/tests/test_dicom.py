@@ -92,7 +92,7 @@ class DicomDetectionTest(SimpleTestCase):
         self.assertTrue(_is_dicom(self.tmp / "missing.dcm"))
 
     def test_jpeg_lossless_decoder_is_available(self):
-        # IMSP angiograms use JPEG Lossless, Process 14 SV1; pydicom needs a plugin to decode it
+        # Site 1 angiograms use JPEG Lossless, Process 14 SV1; pydicom needs a plugin to decode it
         from pydicom.pixels.decoders import JPEGLosslessSV1Decoder
 
         self.assertTrue(JPEGLosslessSV1Decoder.is_available)
@@ -150,7 +150,7 @@ class DicomReaderTest(SimpleTestCase):
         np.testing.assert_array_equal(result, 255 - frame)
 
     def test_single_frame_series_is_ordered_by_filename_when_instance_numbers_tie(self):
-        # UMFCD stores the run number in InstanceNumber, so every frame of a series shares it and
+        # Site 3 stores the run number in InstanceNumber, so every frame of a series shares it and
         # the base-36 filename counter (I2000009 < I200000A) is the frame order.
         series = generate_uid()
         names = ["I200000A", "I2000000", "I2000009"]
