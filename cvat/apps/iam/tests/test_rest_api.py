@@ -316,61 +316,31 @@ class PasswordManagementAPITestCase(ApiTestBase):
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.check_password(new_password))
 
-    def test_password_reset_confirm_accepts_256_character_password(self):
-        new_password = "Aa1" + ("x" * 253)
-        uid = user_pk_to_url_str(self.admin)
-        token = default_token_generator.make_token(self.admin)
 
+class PasswordResetDisabledAPITestCase(ApiTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        # create only admin account
+        create_db_users(cls, primary=False, extra=False)
+
+    def test_password_reset_request_is_disabled(self):
         response = self.client.post(
-            reverse("rest_password_reset_confirm"),
+            "/api/auth/password/reset", {"email": self.admin.email}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_password_reset_confirm_is_disabled_even_with_a_valid_token(self):
+        new_password = "Aa1" + ("x" * 13)
+        response = self.client.post(
+            "/api/auth/password/reset/confirm",
             {
-                "uid": uid,
-                "token": token,
+                "uid": user_pk_to_url_str(self.admin),
+                "token": default_token_generator.make_token(self.admin),
                 "new_password1": new_password,
                 "new_password2": new_password,
             },
             format="json",
         )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.admin.refresh_from_db()
-        self.assertTrue(self.admin.check_password(new_password))
-
-    def test_password_reset_confirm_rejects_oversized_passwords(self):
-        oversized_password = "Aa1" + ("x" * 254)
-        uid = user_pk_to_url_str(self.admin)
-        token = default_token_generator.make_token(self.admin)
-
-        response = self.client.post(
-            reverse("rest_password_reset_confirm"),
-            {
-                "uid": uid,
-                "token": token,
-                "new_password1": oversized_password,
-                "new_password2": oversized_password,
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["new_password1"][0].code, "max_length")
-        self.assertEqual(response.data["new_password2"][0].code, "max_length")
-
-    def test_password_reset_confirm_rejects_short_passwords(self):
-        uid = user_pk_to_url_str(self.admin)
-        token = default_token_generator.make_token(self.admin)
-
-        response = self.client.post(
-            reverse("rest_password_reset_confirm"),
-            {
-                "uid": uid,
-                "token": token,
-                "new_password1": "Aa1pass",
-                "new_password2": "Aa1pass",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["new_password1"][0].code, "min_length")
-        self.assertEqual(response.data["new_password2"][0].code, "min_length")
+        self.assertFalse(self.admin.check_password(new_password))

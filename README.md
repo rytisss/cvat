@@ -10,7 +10,7 @@ identical to upstream and tracks the `develop` branch.
 | [CVDLINK branding](#cvdlink-branding) | Logo, favicon, and product-name swaps; original CVAT assets kept alongside. |
 | [Local HTTPS](#local-https-for-self-hosted-deployment) | Self-hosted TLS using locally-issued certs from `certs/` instead of Let's Encrypt. |
 | [Running on an external URL](#running-on-an-external-url) | Serve CVAT on a public hostname behind a TLS-terminating proxy or Cloudflare Tunnel, with working annotation uploads. |
-| [User accounts](#user-accounts) | Public self-registration is disabled; accounts are created by administrators. |
+| [User accounts](#user-accounts) | Public self-registration and password reset ("Forgot password?") are disabled; accounts and passwords are managed by administrators. |
 | [Keycloak SSO](#keycloak-sso-via-oauth2-proxy) | OpenID Connect single sign-on for the open-source build, layered in via oauth2-proxy + Traefik forwardAuth. |
 
 ## DICOM (`.dcm`) support
@@ -138,12 +138,20 @@ page automatically because it checks the server schema for that endpoint.
 Administrators create accounts with
 `docker exec -it cvat_server bash -ic 'python3 ~/manage.py createsuperuser'`
 or in the Django admin panel at `<your CVAT URL>/admin` (Authentication and
-Authorization → Users → Add user). Password change and reset for existing
-accounts work as in stock CVAT. With Keycloak SSO enabled, users are still
+Authorization → Users → Add user). With Keycloak SSO enabled, users are still
 auto-provisioned on first SSO login.
 
+Password reset is **disabled** too: `/api/auth/password/reset` and
+`/api/auth/password/reset/confirm` are not mounted, so the login page shows no
+"Forgot password?" link and the reset pages are not reachable. No email backend
+is configured, so reset emails could not be delivered anyway. Signed-in users
+can still change their own password (user menu → Change password), and
+administrators set a forgotten password with
+`docker exec -it cvat_server bash -ic 'python3 ~/manage.py changepassword <username>'`
+or in the Django admin panel.
+
 Upstream unit tests for registration are skipped; upstream REST/e2e suites
-that self-register test users will fail.
+that self-register test users or use password reset will fail.
 
 ### Check registration is disabled
 
@@ -158,15 +166,21 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$CVAT_URL/api/auth/register" \
 # 2. The schema no longer advertises it (expect 0)
 curl -s "$CVAT_URL/api/schema/" | grep -c '/api/auth/register'
 
+# 2b. Password reset is gone too (expect 404, then 0)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$CVAT_URL/api/auth/password/reset" \
+  -H 'Content-Type: application/json' -d '{"email":"admin@example.com"}'
+curl -s "$CVAT_URL/api/schema/" | grep -c '/api/auth/password/reset'
+
 # 3. Login still works (expect a JSON body with "key")
 curl -s -X POST "$CVAT_URL/api/auth/login" -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"<password>"}'
 ```
 
-In the browser, the login page should have no "Create an account" link, and
-opening `/auth/register` directly redirects back to the login page. The unit
-tests for this live in `cvat/apps/iam/tests/test_rest_api.py`
-(`UserRegisterDisabledAPITestCase`, `PasswordManagementAPITestCase`).
+In the browser, the login page should have no "Create an account" or
+"Forgot password?" link, and opening `/auth/register` or `/auth/password/reset`
+directly redirects back to the login page. The unit tests for this live in
+`cvat/apps/iam/tests/test_rest_api.py` (`UserRegisterDisabledAPITestCase`,
+`PasswordManagementAPITestCase`, `PasswordResetDisabledAPITestCase`).
 
 ## Keycloak SSO via oauth2-proxy
 
