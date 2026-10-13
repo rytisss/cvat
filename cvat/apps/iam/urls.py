@@ -4,12 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 from allauth.account import app_settings as allauth_settings
-from dj_rest_auth.views import (
-    LogoutView,
-    PasswordChangeView,
-    PasswordResetConfirmView,
-    PasswordResetView,
-)
+from dj_rest_auth.views import LogoutView, PasswordChangeView
 from django.conf import settings
 from django.urls import path, re_path
 from django.urls.conf import include
@@ -30,6 +25,13 @@ if settings.IAM_TYPE == "BASIC":
     # is not mounted, which also makes the UI hide the "Create an account" page
     # (it checks for /api/auth/register in the server schema). Accounts are created
     # by administrators via the Django admin panel.
+    #
+    # Password reset ("Forgot password?") is disabled the same way: the reset and
+    # reset/confirm endpoints are not mounted, so the UI hides the link and the reset
+    # pages (it checks for /api/auth/password/reset in the server schema). No email
+    # backend is configured, so reset emails could not be delivered anyway.
+    # Administrators set passwords in the Django admin panel or with
+    # `manage.py changepassword`; signed-in users can still change their own password.
 
     password_change_view_kwargs = {}
 
@@ -47,12 +49,6 @@ if settings.IAM_TYPE == "BASIC":
 
     urlpatterns += [
         # password
-        path("password/reset", PasswordResetView.as_view(), name="rest_password_reset"),
-        path(
-            "password/reset/confirm",
-            PasswordResetConfirmView.as_view(),
-            name="rest_password_reset_confirm",
-        ),
         path(
             "password/change",
             PasswordChangeView.as_view(**password_change_view_kwargs),
