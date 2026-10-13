@@ -10,7 +10,7 @@ import Layout from 'antd/lib/layout';
 import { Col, Row } from 'antd/lib/grid';
 import Title from 'antd/lib/typography/Title';
 import CVATLogo from 'components/common/cvat-logo';
-import SVGSigningBackground from '../../assets/signing-background.svg';
+import SVGSigningBackground from '../../assets/signing-background-cvdlink.svg';
 
 interface SignInLayoutComponentProps {
     children: JSX.Element | JSX.Element[];
