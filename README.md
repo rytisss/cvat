@@ -30,7 +30,7 @@ Upstream CVAT does not natively ingest DICOM files. This fork adds:
   `create-task-content.tsx`).
 - `pydicom` added to `cvat/requirements/base.in` / `base.txt`.
 
-### Angiography runs (CVD-LINK sites)
+### Angiography runs (CVDLINK sites)
 
 A task holds **one angiography run**. The partner exports store runs in three ways, and all
 three upload from **My computer** on the task creation page:
